@@ -1,7 +1,8 @@
-import { anthropic } from '@ai-sdk/anthropic'
 import type { LanguageModelV3 } from '@ai-sdk/provider'
 import { generateText, Output } from 'ai'
 import z from 'zod/v4'
+
+import { primaryModel } from '../../providers/primary-models'
 
 /** Compact citation tag assigned to each packed message while the prompt is built. */
 export type ContextShardMessageId = `m${number}`
@@ -150,7 +151,7 @@ export function renderContextShardInferencePrompt(input: ContextShardInferenceIn
  */
 export async function generateContextShardCandidates(
 	input: ContextShardInferenceInput,
-	{ model = anthropic('claude-haiku-4-5') }: { model?: LanguageModelV3 } = {},
+	{ model = primaryModel('haiku') }: { model?: LanguageModelV3 } = {},
 ): Promise<ContextShardInferenceOutput> {
 	const parsedInput = ContextShardInferenceInputSchema.safeParse(input)
 	if (!parsedInput.success) {

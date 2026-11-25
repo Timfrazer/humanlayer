@@ -1,6 +1,7 @@
-import { anthropic } from '@ai-sdk/anthropic'
 import { type LearnQuestionSet, LearnQuestionSetSchema } from '@humanlayer/db/zodschemas/learn-questions'
 import { generateText, Output } from 'ai'
+
+import { primaryModel } from '../../providers/primary-models'
 
 const GENERATION_PROMPT = `You are a codebase quiz generator. Given a research document about a software codebase, generate 3-5 multiple choice quiz questions that help someone deeply understand how the system works.
 
@@ -62,7 +63,7 @@ export async function generateLearnQuestions(content: string): Promise<LearnQues
 	const prompt = GENERATION_PROMPT.replace('{content}', content)
 
 	const { output } = await generateText({
-		model: anthropic('claude-sonnet-5'),
+		model: primaryModel('sonnet'),
 		prompt,
 		output: Output.object({
 			schema: LearnQuestionSetOutputSchema,

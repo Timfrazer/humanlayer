@@ -1,19 +1,18 @@
-import { anthropic } from '@ai-sdk/anthropic'
-import { openai } from '@ai-sdk/openai'
 import type { LanguageModelV3 } from '@ai-sdk/provider'
 import * as Sentry from '@sentry/core'
 
 import { logger } from '../logger'
 import { createReliableLanguageModel } from '../reliable-language-model'
+import { fallbackModel, isOpenRouterEnabled, primaryModel } from './primary-models'
 
 export type ModelAlias = 'sonnet' | 'haiku'
 
 const PRIMARY: Record<ModelAlias, LanguageModelV3> = {
-	sonnet: anthropic('claude-sonnet-5'),
-	haiku: anthropic('claude-haiku-4-5'),
+	sonnet: primaryModel('sonnet'),
+	haiku: primaryModel('haiku'),
 }
 
-const isFallbackEnabled = Boolean(process.env.OPENAI_API_KEY?.trim())
+const isFallbackEnabled = isOpenRouterEnabled || Boolean(process.env.OPENAI_API_KEY?.trim())
 
 if (!isFallbackEnabled) {
 	logger.warn({ event: 'ai_fallback_disabled' }, 'OPENAI_API_KEY not set — AI fallback disabled; primary-only mode')
@@ -23,8 +22,8 @@ if (!isFallbackEnabled) {
 // when the key is missing (which would otherwise fail at first inference call).
 const FALLBACK: Record<ModelAlias, LanguageModelV3> | null = isFallbackEnabled
 	? {
-			sonnet: openai('gpt-5'),
-			haiku: openai('gpt-5-mini'),
+			sonnet: fallbackModel('sonnet'),
+			haiku: fallbackModel('haiku'),
 		}
 	: null
 
