@@ -7,6 +7,7 @@ import { AccessRequestService } from '../../../../effects/services/access-reques
 import type { WorkosError } from '../../../../effects/services/workos/workos.errors'
 import { WorkosService } from '../../../../effects/services/workos/workos.service'
 import { Sentry } from '../../../../instrument'
+import { emailDomainNotAllowedMessage, isEmailDomainAllowed } from '../../../../lib/environment'
 import { buildUpgradeRequiredData, wouldExceedStarterCapacity } from '../../../../lib/free-capacity'
 import { effectOrpcBaseForOrganizationAdmin } from '../../../effect-base'
 
@@ -47,6 +48,10 @@ export const createAdminInvitationProcedure = effectOrpcBaseForOrganizationAdmin
 			workos_organization_id: auth.workosOrganizationId,
 			acting_admin_user_id: auth.userId,
 		})
+
+		if (!isEmailDomainAllowed(input.email)) {
+			return yield* Effect.fail(errors.BAD_REQUEST({ data: { message: emailDomainNotAllowedMessage() } }))
+		}
 
 		const customerId = yield* billingKv
 			.getOrgCustomerId({ organizationId: auth.organizationId })

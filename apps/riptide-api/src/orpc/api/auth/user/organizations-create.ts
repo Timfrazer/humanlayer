@@ -7,9 +7,12 @@ import { Effect } from 'effect'
 import { refreshStripeBillingCache } from '../../../../effects/services/billing/billing-access.service'
 import { OnboardingService } from '../../../../effects/services/onboarding/onboarding.service'
 import {
+	allowedEmailDomains,
 	BLOCK_NEW_ORG_CREATION_MESSAGE,
+	emailDomainNotAllowedMessage,
 	isBillingEnforcementEnabled,
 	isDevEnvironment,
+	isEmailDomainAllowed,
 	isHumanlayerEmailDomain,
 	isHumanlayerStaffEmail,
 	isNewOrgCreationBlocked,
@@ -31,6 +34,15 @@ export const createOrganizationProcedure = apiBaseNoOrg.auth.user.organizations.
 			auth,
 			services: { workos, db, stripe },
 		} = context
+
+		if (allowedEmailDomains().length > 0) {
+			const user = await workos.userManagement.getUser(auth.userId)
+			if (!isEmailDomainAllowed(user.email)) {
+				throw errors.BAD_REQUEST({
+					data: { message: emailDomainNotAllowedMessage() },
+				})
+			}
+		}
 
 		if (isNewOrgCreationBlocked()) {
 			// HumanLayer staff (humanlayer.dev / humanlayer.com) can still create
@@ -270,8 +282,10 @@ export const createOrganizationProcedure = apiBaseNoOrg.auth.user.organizations.
 			const activeMembers = await workos.countActiveOrganizationMemberships(workosOrg.id)
 			const pendingInvitations = await workos.countPendingInvitations({ workosOrganizationId: workosOrg.id })
 			const remainingInviteCapacity = getStarterFreeCapacityRemaining({ activeMembers, pendingInvitations })
-			const emailsToInvite = input.inviteEmails.slice(0, remainingInviteCapacity)
-			failedInvites.push(...input.inviteEmails.slice(remainingInviteCapacity))
+			const allowedInviteEmails = input.inviteEmails.filter((email) => isEmailDomainAllowed(email))
+			failedInvites.push(...input.inviteEmails.filter((email) => !isEmailDomainAllowed(email)))
+			const emailsToInvite = allowedInviteEmails.slice(0, remainingInviteCapacity)
+			failedInvites.push(...allowedInviteEmails.slice(remainingInviteCapacity))
 
 			const results = await Promise.allSettled(
 				emailsToInvite.map((email) =>

@@ -98,3 +98,28 @@ export function isHumanlayerStaffEmail(email: string): boolean {
 	const domain = email.split('@')[1]?.toLowerCase()
 	return domain === 'humanlayer.dev' || domain === 'humanlayer.com'
 }
+
+/**
+ * Self-host: email domains allowed to create organizations and to be invited,
+ * from the comma-separated ALLOWED_EMAIL_DOMAINS env var (for example
+ * "example.com,example.org"). Empty or unset means every domain is allowed.
+ */
+export function allowedEmailDomains(): string[] {
+	return (process.env.ALLOWED_EMAIL_DOMAINS ?? '')
+		.split(',')
+		.map((domain) => domain.trim().toLowerCase().replace(/^@/, ''))
+		.filter((domain) => domain.length > 0)
+}
+
+export function isEmailDomainAllowed(email: string): boolean {
+	const allowed = allowedEmailDomains()
+	if (allowed.length === 0) return true
+	const domain = email.split('@').pop()?.trim().toLowerCase()
+	return domain !== undefined && allowed.includes(domain)
+}
+
+export function emailDomainNotAllowedMessage(): string {
+	return `This HumanLayer is limited to ${allowedEmailDomains()
+		.map((domain) => `@${domain}`)
+		.join(', ')} email addresses.`
+}
