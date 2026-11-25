@@ -337,7 +337,9 @@ export const createOrganizationProcedure = apiBaseNoOrg.auth.user.organizations.
 			organizationId: dbOrg.id,
 			workosOrganizationId: workosOrg.id,
 			organizationName: workosOrg.name,
-			stripeCustomerId: provisioning.customerId,
+			// No Stripe customer exists when billing enforcement is off; the output
+			// schema only accepts a real customer id.
+			stripeCustomerId: isBillingEnforcementEnabled() ? provisioning.customerId : undefined,
 			failedInvites,
 		}
 	},
