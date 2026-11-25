@@ -8,6 +8,7 @@ import { refreshStripeBillingCache } from '../../../../effects/services/billing/
 import { OnboardingService } from '../../../../effects/services/onboarding/onboarding.service'
 import {
 	BLOCK_NEW_ORG_CREATION_MESSAGE,
+	isBillingEnforcementEnabled,
 	isDevEnvironment,
 	isHumanlayerEmailDomain,
 	isHumanlayerStaffEmail,
@@ -115,55 +116,73 @@ export const createOrganizationProcedure = apiBaseNoOrg.auth.user.organizations.
 		let provisionedCustomerId: string | null = null
 		let createdStripeCustomer = false
 		try {
-			const user = await workos.userManagement.getUser(auth.userId)
-			const customer = await stripe.ensureStripeCustomerForOrg({
-				organizationId: dbOrg.id,
-				organizationName: dbOrg.name,
-				adminEmail: user.email,
-				existingCustomerId: dbOrg.stripe_customer_id,
-			})
+			if (!isBillingEnforcementEnabled()) {
+				// Self-host: with billing enforcement off there is no Stripe account to
+				// provision against. Still write internal_org_id to WorkOS, because the
+				// sync proxy requires that claim on every access token.
+				await workos.organizations.updateOrganization({
+					organization: workosOrg.id,
+					metadata: {
+						internal_org_id: dbOrg.id,
+					},
+				})
+				provisioning = {
+					customerId: 'billing-disabled',
+					createdCustomer: false,
+					subscriptionId: 'billing-disabled',
+					createdSubscription: false,
+				}
+			} else {
+				const user = await workos.userManagement.getUser(auth.userId)
+				const customer = await stripe.ensureStripeCustomerForOrg({
+					organizationId: dbOrg.id,
+					organizationName: dbOrg.name,
+					adminEmail: user.email,
+					existingCustomerId: dbOrg.stripe_customer_id,
+				})
 
-			provisionedCustomerId = customer.customerId
-			createdStripeCustomer = customer.created
+				provisionedCustomerId = customer.customerId
+				createdStripeCustomer = customer.created
 
-			const [updatedOrg] = await db
-				.update(organizations)
-				.set({ stripe_customer_id: customer.customerId })
-				.where(eq(organizations.id, dbOrg.id))
-				.returning()
+				const [updatedOrg] = await db
+					.update(organizations)
+					.set({ stripe_customer_id: customer.customerId })
+					.where(eq(organizations.id, dbOrg.id))
+					.returning()
 
-			if (!updatedOrg) {
-				throw new Error('Failed to persist Stripe customer id on organization')
-			}
+				if (!updatedOrg) {
+					throw new Error('Failed to persist Stripe customer id on organization')
+				}
 
-			dbOrg = updatedOrg
+				dbOrg = updatedOrg
 
-			await stripe.ensureBillingOrgMappings({
-				organizationId: dbOrg.id,
-				customerId: customer.customerId,
-			})
+				await stripe.ensureBillingOrgMappings({
+					organizationId: dbOrg.id,
+					customerId: customer.customerId,
+				})
 
-			await workos.organizations.updateOrganization({
-				organization: workosOrg.id,
-				stripeCustomerId: customer.customerId,
-				metadata: {
-					internal_org_id: dbOrg.id,
-				},
-			})
+				await workos.organizations.updateOrganization({
+					organization: workosOrg.id,
+					stripeCustomerId: customer.customerId,
+					metadata: {
+						internal_org_id: dbOrg.id,
+					},
+				})
 
-			const quantity = await workos.countActiveOrganizationMemberships(workosOrg.id)
+				const quantity = await workos.countActiveOrganizationMemberships(workosOrg.id)
 
-			const subscription = await stripe.ensureStarterSubscription({
-				customerId: customer.customerId,
-				quantity,
-			})
-			await context.services.effectRuntime.runPromise(refreshStripeBillingCache(customer.customerId))
+				const subscription = await stripe.ensureStarterSubscription({
+					customerId: customer.customerId,
+					quantity,
+				})
+				await context.services.effectRuntime.runPromise(refreshStripeBillingCache(customer.customerId))
 
-			provisioning = {
-				customerId: customer.customerId,
-				createdCustomer: customer.created,
-				subscriptionId: subscription.subscriptionId,
-				createdSubscription: subscription.created,
+				provisioning = {
+					customerId: customer.customerId,
+					createdCustomer: customer.created,
+					subscriptionId: subscription.subscriptionId,
+					createdSubscription: subscription.created,
+				}
 			}
 		} catch (error) {
 			logger.error(
