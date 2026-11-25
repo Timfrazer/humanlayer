@@ -9,15 +9,18 @@ This folder holds what we added to run the HumanLayer backend on [Railway](https
 | Postgres 18, Redis, Electric, durable streams | Running on Railway |
 | Migrations and cleanup jobs (`jobs` service) | Running |
 | API (`api` service) | Boots and passes its health check with placeholder third-party values |
-| Sync proxy (`sync` service) | Boots; not yet tested with a real login |
-| WorkOS login, web apps, CLI and daemon builds, file uploads | Not done yet |
+| Sync proxy (`sync` service) | Boots with real WorkOS values; not yet tested with a real login |
+| Web apps (`app`, `admin` services) | Built and deployed; not yet tested in a browser |
+| Bucket CORS for browser uploads | Rule set and preflight checked; no real upload yet |
+| End-to-end WorkOS login, CLI and daemon builds | Not done yet |
 
 ## Files here
 
 - `jobs.Dockerfile`, `jobs.sh`: one container that runs database migrations on start, then the stale-daemon sweeper every minute and database maintenance once a day. It replaces the three AWS Lambdas (`riptide-migrator`, `stale-daemon-sweeper`, `database-maintenance-function`). Railway cron cannot run more often than every 5 minutes, so the sweeper runs in a loop.
+- `build-web.sh`, `web.Dockerfile`, `web.Caddyfile`: build `riptide-ui` and `riptide-cloud` locally with your origins baked in, and stage each as a small Caddy static site (single-page-app fallback) for `railway up <folder> --path-as-root --no-gitignore`.
 - `api.Dockerfile`, `sync.Dockerfile`: copies of `apps/riptide-api/Dockerfile` and `apps/riptide-electric-proxy/Dockerfile` without the Sentry source-map stage. Railway rejects BuildKit `--mount=type=secret`.
 
-All four build with the **monorepo root** as the build context. Point a Railway service at one by setting the `RAILWAY_DOCKERFILE_PATH` variable, for example `selfhost/api.Dockerfile`.
+The jobs, api and sync Dockerfiles build with the **monorepo root** as the build context. Point a Railway service at one by setting the `RAILWAY_DOCKERFILE_PATH` variable, for example `selfhost/api.Dockerfile`.
 
 ## Services
 
@@ -190,7 +193,5 @@ From reading the code; not yet verified end to end. Use a dedicated WorkOS envir
 
 ## Still to do
 
-- Web apps (`apps/riptide-ui`, `apps/riptide-cloud`) as static sites with single-page-app fallback.
 - CLI and daemon build with our own origins (see `.claude/skills/self-host-humanlayer/references/build-config.md`).
-- Bucket CORS for browser uploads.
 - A real GitHub App.
